@@ -1,19 +1,25 @@
 name: ZAP Scan
+
 on:
   workflow_dispatch:
   push:
     branches: [ "main" ]
 
-jobs:  
+permissions:
+  contents: read
+  issues: write   # Solo si quisieras crear issues (puedes quitarlo si allowIssue: false)
+
+jobs:
   zap-scan:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@v4
-      - name: Run ZAP full scan
+
+      - name: ZAP Full Scan
         uses: zaproxy/action-full-scan@v0.10.0
         with:
-          target: ${{ secrets.APP_BASE_URL }}  # e.g., https://yourapp.example.com
+          target: ${{ secrets.APP_BASE_URL }}  # Ajusta a la URL correcta (frontend o backend)
+          allowIssue: false        # Cambia a true si quieres que abra issues
+          failAction: false        # true haría fallar el job si hay alertas
+          rulesFileName: ""        # opcional: lista para ignorar falsos positivos
+          # token: ${{ secrets.GITHUB_TOKEN }} # Solo imprescindible si allowIssue: true y falta permiso
