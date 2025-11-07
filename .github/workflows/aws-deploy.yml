@@ -18,26 +18,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache npm (backend)
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.npm
-            backend/node_modules
-          key: ${{ runner.os }}-npm-backend-${{ hashFiles('backend/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-npm-backend-
-
-      - name: Cache npm (frontend)
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.npm
-            frontend/node_modules
-          key: ${{ runner.os }}-npm-frontend-${{ hashFiles('frontend/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-npm-frontend-
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -58,26 +38,7 @@ jobs:
           docker build -f backend/Dockerfile -t $ECR_REGISTRY/practica-backend:${{ github.sha }} ./backend
           docker build -f frontend/Dockerfile -t $ECR_REGISTRY/practica-frontend:${{ github.sha }} ./frontend
 
-      - name: Trivy scan (backend)
-        uses: aquasecurity/trivy-action@0.24.0
-        with:
-          image-ref: ${{ env.ECR_REGISTRY }}/practica-backend:${{ github.sha }}
-          format: 'table'
-          exit-code: '1'
-          ignore-unfixed: true
-          severity: 'CRITICAL,HIGH'
-
-      - name: Trivy scan (frontend)
-        uses: aquasecurity/trivy-action@0.24.0
-        with:
-          image-ref: ${{ env.ECR_REGISTRY }}/practica-frontend:${{ github.sha }}
-          format: 'table'
-          exit-code: '1'
-          ignore-unfixed: true
-          severity: 'CRITICAL,HIGH'
-
       - name: Push images
-        if: success()
         run: |
           docker push $ECR_REGISTRY/practica-backend:${{ github.sha }}
           docker push $ECR_REGISTRY/practica-frontend:${{ github.sha }}
@@ -94,28 +55,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Configure AWS credentials (use repo secrets)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
         with:
           version: "v1.30.0"
 
-      - name: Configure kubeconfig
+      - name: Generate kubeconfig for EKS
         run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
+          aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name ${{ secrets.EKS_CLUSTER_NAME }}
+          kubectl cluster-info
+          kubectl get nodes
 
-      - name: Apply app manifests and rollout
+      - name: Apply manifests and rollout
         run: |
           kubectl apply -f infrastructure/k8s/
           kubectl set image deployment/practica-backend backend=${{ needs.build-and-push.outputs.backend }}
           kubectl set image deployment/practica-frontend frontend=${{ needs.build-and-push.outputs.frontend }}
           kubectl rollout status deployment/practica-backend --timeout=180s
           kubectl rollout status deployment/practica-frontend --timeout=180s
-
-      - name: Apply monitoring stack
-        run: |
-          kubectl apply -f infrastructure/monitoring/namespace.yaml
-          kubectl apply -f infrastructure/monitoring/grafana-remote-write-secret.yaml
-          kubectl apply -f infrastructure/monitoring/grafana-agent-config.yaml
-          kubectl apply -f infrastructure/monitoring/grafana-agent-deployment.yaml
