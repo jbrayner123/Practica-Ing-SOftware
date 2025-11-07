@@ -28,10 +28,30 @@ jobs:
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
+      # ✅ NUEVO: Crear repositorios ECR si no existen
+      - name: Create ECR repositories if they don't exist
+        run: |
+          # Crear repositorio backend
+          aws ecr describe-repositories --repository-names practica-backend --region ${{ env.AWS_REGION }} || \
+          aws ecr create-repository \
+            --repository-name practica-backend \
+            --region ${{ env.AWS_REGION }} \
+            --image-scanning-configuration scanOnPush=true \
+            --encryption-configuration encryptionType=AES256
+          
+          # Crear repositorio frontend
+          aws ecr describe-repositories --repository-names practica-frontend --region ${{ env.AWS_REGION }} || \
+          aws ecr create-repository \
+            --repository-name practica-frontend \
+            --region ${{ env.AWS_REGION }} \
+            --image-scanning-configuration scanOnPush=true \
+            --encryption-configuration encryptionType=AES256
+          
+          echo "✅ ECR repositories are ready"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # ✅ CORREGIDO: Usar ${{ env.ECR_REGISTRY }}
       - name: Build and push backend
         uses: docker/build-push-action@v6
         with:
@@ -42,7 +62,6 @@ jobs:
             ${{ env.ECR_REGISTRY }}/practica-backend:${{ github.sha }}
             ${{ env.ECR_REGISTRY }}/practica-backend:latest
 
-      # ✅ CORREGIDO: Usar ${{ env.ECR_REGISTRY }}
       - name: Build and push frontend
         uses: docker/build-push-action@v6
         with:
