@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: read
-  issues: write   # Solo si quisieras crear issues (puedes quitarlo si allowIssue: false)
+  issues: write
 
 jobs:
   zap-scan:
@@ -18,8 +18,9 @@ jobs:
       - name: ZAP Full Scan
         uses: zaproxy/action-full-scan@v0.10.0
         with:
-          target: ${{ secrets.APP_BASE_URL }}  # Ajusta a la URL correcta (frontend o backend)
-          allowIssue: false        # Cambia a true si quieres que abra issues
-          failAction: false        # true haría fallar el job si hay alertas
-          rulesFileName: ""        # opcional: lista para ignorar falsos positivos
-          # token: ${{ secrets.GITHUB_TOKEN }} # Solo imprescindible si allowIssue: true y falta permiso
+          target: ${{ secrets.APP_BASE_URL }}
+          allow_issue_writing: true      # ✅ Corregido (con guiones bajos)
+          fail_action: false             # ✅ Corregido (con guiones bajos)
+          rules_file_name: ""            # ✅ Corregido (con guiones bajos)
+          artifact_name: zap-scan        # ✅ AGREGADO (con guión, no guión bajo)
+          token: ${{ secrets.GITHUB_TOKEN }}
