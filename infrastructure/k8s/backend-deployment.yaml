@@ -21,16 +21,16 @@ spec:
         - name: backend
           image: 211739080646.dkr.ecr.us-east-1.amazonaws.com/practica-backend:latest
           ports:
-            - containerPort: 3000  # Cambia si tu backend usa otro puerto
+            - containerPort: 3001
           readinessProbe:
             httpGet:
               path: /readiness
-              port: 3000
+              port: 3001
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /healthz
-              port: 3000
+              port: 3001
             initialDelaySeconds: 10
             periodSeconds: 10
