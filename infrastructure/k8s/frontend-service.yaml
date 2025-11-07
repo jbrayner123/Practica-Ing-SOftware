@@ -7,6 +7,6 @@ spec:
     app: practica-frontend
   ports:
     - name: http
-      port: 80
-      targetPort: 80
+      port: 3000
+      targetPort: 3000
   type: ClusterIP
