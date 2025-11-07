@@ -1,0 +1,75 @@
+name: AWS ECR + Kubernetes Deploy
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.images.outputs.backend }}
+      frontend: ${{ steps.images.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Ensure ECR repositories exist
+        run: |
+          aws ecr describe-repositories --repository-names practica-backend || aws ecr create-repository --repository-name practica-backend
+          aws ecr describe-repositories --repository-names practica-frontend || aws ecr create-repository --repository-name practica-frontend
+
+      - name: Build images
+        run: |
+          docker build -f backend/Dockerfile -t $ECR_REGISTRY/practica-backend:${{ github.sha }} ./backend
+          docker build -f frontend/Dockerfile -t $ECR_REGISTRY/practica-frontend:${{ github.sha }} ./frontend
+
+      - name: Push images
+        run: |
+          docker push $ECR_REGISTRY/practica-backend:${{ github.sha }}
+          docker push $ECR_REGISTRY/practica-frontend:${{ github.sha }}
+
+      - name: Set outputs
+        id: images
+        run: |
+          echo "backend=$ECR_REGISTRY/practica-backend:${GITHUB_SHA}" >> $GITHUB_OUTPUT
+          echo "frontend=$ECR_REGISTRY/practica-frontend:${GITHUB_SHA}" >> $GITHUB_OUTPUT
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "v1.30.0"
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Apply manifests and rollout
+        run: |
+          kubectl apply -f infrastructure/k8s/
+          kubectl set image deployment/practica-backend backend=${{ needs.build-and-push.outputs.backend }}
+          kubectl set image deployment/practica-frontend frontend=${{ needs.build-and-push.outputs.frontend }}
+          kubectl rollout status deployment/practica-backend --timeout=120s
+          kubectl rollout status deployment/practica-frontend --timeout=120s
