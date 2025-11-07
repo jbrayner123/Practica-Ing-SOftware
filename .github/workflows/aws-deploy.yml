@@ -31,7 +31,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Construcción robusta con la acción oficial (evita el error de buildx sin PATH)
+      # ✅ CORREGIDO: Usar ${{ env.ECR_REGISTRY }}
       - name: Build and push backend
         uses: docker/build-push-action@v6
         with:
@@ -39,8 +39,10 @@ jobs:
           file: backend/Dockerfile
           push: true
           tags: |
-            ${ECR_REGISTRY}/practica-backend:${{ github.sha }}
+            ${{ env.ECR_REGISTRY }}/practica-backend:${{ github.sha }}
+            ${{ env.ECR_REGISTRY }}/practica-backend:latest
 
+      # ✅ CORREGIDO: Usar ${{ env.ECR_REGISTRY }}
       - name: Build and push frontend
         uses: docker/build-push-action@v6
         with:
@@ -48,13 +50,14 @@ jobs:
           file: frontend/Dockerfile
           push: true
           tags: |
-            ${ECR_REGISTRY}/practica-frontend:${{ github.sha }}
+            ${{ env.ECR_REGISTRY }}/practica-frontend:${{ github.sha }}
+            ${{ env.ECR_REGISTRY }}/practica-frontend:latest
 
       - name: Set outputs
         id: images
         run: |
-          echo "backend=${ECR_REGISTRY}/practica-backend:${GITHUB_SHA}" >> $GITHUB_OUTPUT
-          echo "frontend=${ECR_REGISTRY}/practica-frontend:${GITHUB_SHA}" >> $GITHUB_OUTPUT
+          echo "backend=${{ env.ECR_REGISTRY }}/practica-backend:${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "frontend=${{ env.ECR_REGISTRY }}/practica-frontend:${{ github.sha }}" >> $GITHUB_OUTPUT
 
   deploy:
     needs: build-and-push
@@ -62,7 +65,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials (use repo secrets)
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
