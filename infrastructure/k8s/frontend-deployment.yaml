@@ -21,16 +21,16 @@ spec:
         - name: frontend
           image: 211739080646.dkr.ecr.us-east-1.amazonaws.com/practica-frontend:latest
           ports:
-            - containerPort: 80  # Cambia si tu frontend sirve en otro puerto
+            - containerPort: 3000
           readinessProbe:
             httpGet:
               path: /
-              port: 80
+              port: 3000
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /
-              port: 80
+              port: 3000
             initialDelaySeconds: 10
             periodSeconds: 10
