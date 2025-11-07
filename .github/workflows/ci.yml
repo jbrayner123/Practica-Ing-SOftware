@@ -7,7 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  install:
+  # Frontend Jobs
+  frontend-install:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -18,52 +19,138 @@ jobs:
         with:
           node-version: '18'
           
-      - name: Cache dependencies
+      - name: Cache frontend dependencies
         uses: actions/cache@v3
         with:
           path: |
             ~/.npm
-            node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+            frontend/node_modules
+          key: ${{ runner.os }}-frontend-${{ hashFiles('frontend/package.json') }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            ${{ runner.os }}-frontend-
             
-      - name: Install dependencies
-        run: npm ci
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm install
 
-  test:
-    needs: install
+  frontend-test:
+    needs: frontend-install
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [16.x, 18.x, 20.x]
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
         
-      - name: Setup Node.js ${{ matrix.node-version }}
+      - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: '18'
           
-      - name: Cache dependencies
+      - name: Cache frontend dependencies
         uses: actions/cache@v3
         with:
           path: |
             ~/.npm
-            node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+            frontend/node_modules
+          key: ${{ runner.os }}-frontend-${{ hashFiles('frontend/package.json') }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            ${{ runner.os }}-frontend-
             
-      - name: Install dependencies
-        run: npm ci
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm install
         
-      - name: Run tests
+      - name: Run frontend tests
+        working-directory: ./frontend
+        run: npm test -- --watchAll=false
+
+  frontend-build:
+    needs: frontend-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          
+      - name: Cache frontend dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.npm
+            frontend/node_modules
+          key: ${{ runner.os }}-frontend-${{ hashFiles('frontend/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-frontend-
+            
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm install
+        
+      - name: Build frontend
+        working-directory: ./frontend
+        run: npm run build
+
+  # Backend Jobs
+  backend-install:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          
+      - name: Cache backend dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.npm
+            backend/node_modules
+          key: ${{ runner.os }}-backend-${{ hashFiles('backend/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-backend-
+            
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: npm install
+
+  backend-test:
+    needs: backend-install
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          
+      - name: Cache backend dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.npm
+            backend/node_modules
+          key: ${{ runner.os }}-backend-${{ hashFiles('backend/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-backend-
+            
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: npm install
+        
+      - name: Run backend tests
+        working-directory: ./backend
         run: npm test
 
-  lint:
-    needs: install
+  backend-lint:
+    needs: backend-install
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -74,46 +161,20 @@ jobs:
         with:
           node-version: '18'
           
-      - name: Cache dependencies
+      - name: Cache backend dependencies
         uses: actions/cache@v3
         with:
           path: |
             ~/.npm
-            node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+            backend/node_modules
+          key: ${{ runner.os }}-backend-${{ hashFiles('backend/package.json') }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            ${{ runner.os }}-backend-
             
-      - name: Install dependencies
-        run: npm ci
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: npm install
         
-      - name: Run linting
+      - name: Run backend linting
+        working-directory: ./backend
         run: npm run lint
-
-  build:
-    needs: [test, lint]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-          
-      - name: Cache dependencies
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.npm
-            node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-            
-      - name: Install dependencies
-        run: npm ci
-        
-      - name: Build project
-        run: npm run build
