@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: practica-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: practica-backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: practica-backend
+    spec:
+      containers:
+        - name: backend
+          image: 211739080646.dkr.ecr.us-east-1.amazonaws.com/practica-backend:latest
+          ports:
+            - containerPort: 3000  # Cambia si tu backend usa otro puerto
+          readinessProbe:
+            httpGet:
+              path: /readiness
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
