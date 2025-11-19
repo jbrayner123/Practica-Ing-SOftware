@@ -6,9 +6,8 @@ const cors = require('cors');
 app.use(cors());  // Enable CORS for client interactions
 app.use(express.json()); // Enable JSON parsing in requests
 
-// Connect to PostgreSQL
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://user:password@db:5432/mydb' // Modify with your database credentials
+  connectionString: process.env.DATABASE_URL,
 });
 
 // Endpoint for root to address "Cannot GET /"
