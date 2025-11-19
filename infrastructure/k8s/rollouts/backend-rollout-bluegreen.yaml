@@ -1,0 +1,45 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: practica-backend
+  namespace: default
+spec:
+  replicas: 3
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: practica-backend
+  template:
+    metadata:
+      labels:
+        app: practica-backend
+    spec:
+      containers:
+      - name: backend
+        image: jose2678/practica-backend:v1
+        ports:
+        - name: http
+          containerPort: 3001
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 3001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 3001
+          initialDelaySeconds: 10
+          periodSeconds: 10
+  strategy:
+    blueGreen:
+      # Servicio que apunta a la versión activa (blue)
+      activeService: practica-backend-active
+      # Servicio que apunta a la versión preview (green)
+      previewService: practica-backend-preview
+      # Promoción automática después de verificar que está saludable
+      autoPromotionEnabled: false
+      # Segundos antes de escalar down la versión anterior
+      scaleDownDelaySeconds: 30

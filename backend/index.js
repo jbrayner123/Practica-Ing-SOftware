@@ -37,6 +37,10 @@ app.post('/users', async (req, res) => {
     res.status(500).json({ error: 'Database error' });
   }
 });
+// Test Green
+app.get('/version', (req, res) => {
+  res.json({ version: 'v2.0', color: 'green' });
+});
 
 // Start server on port 3001 to avoid conflict
 const PORT = process.env.PORT || 3001;

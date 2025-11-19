@@ -1,0 +1,64 @@
+---
+# Servicio STABLE del Frontend - Versión actual en producción
+apiVersion: v1
+kind: Service
+metadata:
+  name: practica-frontend-stable
+  namespace: default
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: practica-frontend
+
+---
+# Servicio CANARY del Frontend - Nueva versión en prueba
+apiVersion: v1
+kind: Service
+metadata:
+  name: practica-frontend-canary
+  namespace: default
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: practica-frontend
+
+---
+# Ingress - Punto de entrada HTTP para enrutar tráfico
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: practica-ingress
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+    - http:
+        paths:
+          # Ruta para el FRONTEND (Canary)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: practica-frontend-stable
+                port:
+                  number: 3000
+          # Ruta para el BACKEND (Blue-Green)
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: practica-backend-active
+                port:
+                  number: 3001

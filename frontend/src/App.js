@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';                                                                                                [48/1955]
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 function App() {
@@ -7,8 +7,8 @@ function App() {
 
   // Para desarrollo: usar localhost, para producción: usar nombre del servicio
   const API_BASE = window.location.hostname === 'localhost'
-  ? 'http://192.168.50.5:3001'  // Desarrollo local (desde host anfitrión)
-  : 'http://18.217.181.104:3001'; // Producción (IP de EC2)
+    ? 'http://192.168.50.5:3001'  // Desarrollo local (desde host anfitrión)
+    : 'http://18.217.181.104:3001'; // Producción (IP de EC2)
 
   useEffect(() => {
     axios.get(`${API_BASE}/users`)
@@ -30,7 +30,22 @@ function App() {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
+
+      {/* 🚀 Banner de Versión 2 (Canary v2) */}
+      <div style={{
+        backgroundColor: '#4caf50',
+        color: 'white',
+        padding: '10px',
+        textAlign: 'center',
+        fontWeight: 'bold',
+        borderRadius: '6px',
+        marginBottom: '20px'
+      }}>
+        🚀 Versión 2.0 - Canary Release
+      </div>
+
       <h1>User Management</h1>
+
       <div style={{ marginBottom: '20px' }}>
         <input
           value={name}
@@ -44,6 +59,7 @@ function App() {
           }}
           onKeyPress={(e) => e.key === 'Enter' && addUser()}
         />
+
         <button
           onClick={addUser}
           style={{
