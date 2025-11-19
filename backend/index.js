@@ -28,16 +28,14 @@ const initializeDatabase = async () => {
       ON CONFLICT DO NOTHING;
     `;
 
-    // Ejecuta las consultas para inicializar la base de datos
     await pool.query(createTableQuery);
     await pool.query(insertSampleDataQuery);
-
     console.log('Database initialized successfully');
   } catch (err) {
     console.error('Error initializing database:', err);
+    console.error('DATABASE_URL:', process.env.DATABASE_URL); // Imprime la URL para depurar
   }
 };
-
 // Llama a la inicialización de la base de datos
 initializeDatabase();
 
