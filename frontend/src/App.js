@@ -7,8 +7,8 @@ function App() {
 
   // Para desarrollo: usar localhost, para producción: usar nombre del servicio
   const API_BASE = window.location.hostname === 'localhost'
-    ? 'http://192.168.50.5:3001'  // Desarrollo local (desde host anfitrión)
-    : 'http://18.217.181.104:3001'; // Producción (IP de EC2)
+  ? 'http://localhost:3001'  // Desarrollo local
+  : 'https://practica-backend-yfc5.onrender.com'; // Producción (Render)
 
   useEffect(() => {
     axios.get(`${API_BASE}/users`)
