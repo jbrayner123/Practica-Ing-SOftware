@@ -1,6 +1,6 @@
 const express = require('express');
 const { Pool } = require('pg');
-const fs = require('fs');
+const cors = require('cors'); // Agregar CORS
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -8,11 +8,16 @@ const port = process.env.PORT || 3000;
 // Configuración de conexión a la base de datos
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false, // Habilitar SSL en producción
 });
 
+// Habilitar CORS para todas las solicitudes
+app.use(cors());
+
+// Middleware para manejar JSON
 app.use(express.json());
 
-// Inicialización de la tabla en la base de datos
+// Inicialización de la base de datos cuando el servidor arranca
 const initializeDatabase = async () => {
   try {
     const createTableQuery = `
@@ -28,22 +33,24 @@ const initializeDatabase = async () => {
       ON CONFLICT DO NOTHING;
     `;
 
+    // Ejecuta los comandos para crear la base de datos y datos iniciales
     await pool.query(createTableQuery);
     await pool.query(insertSampleDataQuery);
+
     console.log('Database initialized successfully');
   } catch (err) {
     console.error('Error initializing database:', err);
-    console.error('DATABASE_URL:', process.env.DATABASE_URL); // Imprime la URL para depurar
+    console.error('DATABASE_URL:', process.env.DATABASE_URL);
   }
 };
-// Llama a la inicialización de la base de datos
 initializeDatabase();
 
+// Endpoint básico para la raíz
 app.get('/', (req, res) => {
   res.send('Welcome to the Backend API!');
 });
 
-// Endpoint para obtener la lista de usuarios
+// Endpoint para obtener todos los usuarios
 app.get('/users', async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM users');
@@ -54,6 +61,25 @@ app.get('/users', async (req, res) => {
   }
 });
 
+// Endpoint para agregar un nuevo usuario
+app.post('/users', async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+    const result = await pool.query(
+      'INSERT INTO users (name) VALUES ($1) RETURNING *',
+      [name]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Error adding user:', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Servidor escuchando en el puerto especificado
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
