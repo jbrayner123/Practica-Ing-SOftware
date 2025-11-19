@@ -51,6 +51,11 @@ jobs:
           mv kubeconfig $HOME/.kube/config
           chmod 600 $HOME/.kube/config
 
+      - name: Validate connection to cluster
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+
       - name: Deploy to Green Namespace
         run: |
           kubectl apply -n green -f k8s/deployment-green.yaml
