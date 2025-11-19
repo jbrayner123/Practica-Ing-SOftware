@@ -5,7 +5,7 @@ on:
     branches: [ main ]
 
 env:
-  IMAGE: ghcr.io/${{ github.repository }}/app:${{ github.sha }}
+  IMAGE: ghcr.io/jbrayner123/practica-ing-software/app:${{ github.sha }}
 
 jobs:
   build:
@@ -29,14 +29,22 @@ jobs:
       - name: Build and push image
         id: build-image
         run: |
-          docker build -t ${{ env.IMAGE }} .
-          docker push ${{ env.IMAGE }}
+          docker build -t ghcr.io/jbrayner123/practica-ing-software/app:${{ github.sha }} .
+          docker push ghcr.io/jbrayner123/practica-ing-software/app:${{ github.sha }}
 
   deploy-green:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Configure Kubecontext from secrets
+      - name: Checkout (for manifests and scripts)
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure Kubecontext
         run: |
           echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > kubeconfig
           mkdir -p $HOME/.kube
