@@ -1,15 +1,19 @@
-// backend/index.js
 const express = require('express'); // Import Express for building the API
 const { Pool } = require('pg'); // Import PostgreSQL client
-const app = express();                                                                                                                              [1/1851]
+const app = express();
 const cors = require('cors');
 
-app.use(cors());  // ← NUEVO
-app.use(express.json());
+app.use(cors());  // Enable CORS for client interactions
+app.use(express.json()); // Enable JSON parsing in requests
 
 // Connect to PostgreSQL
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://user:password@db:5432/mydb'
+  connectionString: process.env.DATABASE_URL || 'postgresql://user:password@db:5432/mydb' // Modify with your database credentials
+});
+
+// Endpoint for root to address "Cannot GET /"
+app.get('/', (req, res) => {
+  res.send('Welcome to the Backend API!');
 });
 
 // Health check endpoint
@@ -37,11 +41,12 @@ app.post('/users', async (req, res) => {
     res.status(500).json({ error: 'Database error' });
   }
 });
-// Test Green
+
+// Test Green endpoint
 app.get('/version', (req, res) => {
   res.json({ version: 'v2.0', color: 'green' });
 });
 
-// Start server on port 3001 to avoid conflict
+// Start server on port from environment or default 3001
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
