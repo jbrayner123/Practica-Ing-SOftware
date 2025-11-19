@@ -29,7 +29,7 @@ jobs:
       - name: Build and push image
         id: build-image
         run: |
-          docker build -t ghcr.io/jbrayner123/practica-ing-software/app:${{ github.sha }} .
+          docker build -t ghcr.io/jbrayner123/practica-ing-software/app:${{ github.sha }} -f Dockerfile .
           docker push ghcr.io/jbrayner123/practica-ing-software/app:${{ github.sha }}
 
   deploy-green:
