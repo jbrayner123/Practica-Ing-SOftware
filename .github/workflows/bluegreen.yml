@@ -35,6 +35,8 @@ jobs:
   deploy-green:
     needs: build
     runs-on: ubuntu-latest
+    container:
+      network: k3d-network  # Usa la red Docker creada para acceso al clúster
     steps:
       - name: Checkout (for manifests and scripts)
         uses: actions/checkout@v4
@@ -46,7 +48,8 @@ jobs:
 
       - name: Configure Kubecontext
         run: |
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > kubeconfig
+          # Copiar kubeconfig local para acceder al clúster
+          echo "${{ secrets.LOCAL_KUBE_CONFIG }}" | base64 --decode > kubeconfig
           mkdir -p $HOME/.kube
           mv kubeconfig $HOME/.kube/config
           chmod 600 $HOME/.kube/config
