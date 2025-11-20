@@ -2,10 +2,24 @@ name: CI-CD Blue-Green
 
 on:
   push:
+    branches: [. **Usa Docker Compose (opcional)**:
+   Si necesitas que tu contenedor interaccione con la red Docker (`k3d-network`), puedes configurar Docker Compose para incluir la red al desplegar el contenedor dentro del workflow.
+
+ main ]
+
+env:
+  IMAGE: ghcr.io/jbrayner123/practica-ing3. **Workflow ajustado**:
+Aquí está cómo quedaría después de realizar los ajustes:
+
+````yaml name=.github/workflows/bluegreen.yml
+name: CI-CD Blue-Green
+
+on:
+  push:
     branches: [ main ]
 
 env:
-  IMAGE: ghcr.io/jbrayner123/practica-ing-software/app:${{ github.sha }}
+  IMAGE-software/app:${{ github.sha }}
 
 jobs:
   build:
@@ -17,64 +31,128 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: ghcr.io/jbrayner123/practica-ing-software/app:${{ github.sha }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+: docker/setup-buildx-action@v3
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login    outputs:
+      image: ${{ steps.build-image.outputs.image }}
+   -action@v2
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_TOKEN }}
+          password steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx: ${{ secrets.GHCR_TOKEN }}
 
       - name: Build and push image
         id: build-image
-        run: |
-          docker build -t ghcr.io/jbrayner123/practica-ing-software/app:${{ github.sha }} -f backend/Dockerfile backend
-          docker push ghcr.io/jbrayner123/practica-ing-software/app:${{ github.sha }}
+       -action@v3
+
+      - name: Login to GitHub Container Registry
+ run: |
+          docker build -t ghcr.io/jbr        uses: docker/login-action@v2
+        with:
+ayner123/practica-ing-software/app:${{ github.sha }}          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH -f backend/Dockerfile backend
+          docker push ghcr.io/jbrayner123/practica-ing-software/app:${{CR_TOKEN }}
+
+      - name: Build and push image
+ github.sha }}
 
   deploy-green:
     needs: build
     runs-on: ubuntu-latest
-    container:
-      network: k3d-network  # Usa la red Docker creada para acceso al clúster
+    steps:
+      - name: Checkout        id: build-image
+        run: |
+          docker build -t ghcr.io/jbrayner123/practica-ing-software/app (for manifests and scripts)
+        uses: actions:${{ github.sha }} -f backend/Dockerfile backend
+         /checkout@v4
+
+      - name: Setup kubectl
+        docker push ghcr.io/jbrayner123/practica-ing-so uses: azure/setup-kubectl@v3
+        with:
+          versionftware/app:${{ github.sha }}
+
+  deploy-green:
+   : 'v1.28.0'
+
+      - name: Configure Kubecontext
+        run: |
+          echo "${{ secrets.LOCAL_K needs: build
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout (for manifests and scripts)
         uses: actions/checkout@v4
 
-      - name: Setup kubectl
+      - name: SetupUBE_CONFIG }}" | base64 --decode > kubeconfig kubectl
         uses: azure/setup-kubectl@v3
         with:
           version: 'v1.28.0'
 
-      - name: Configure Kubecontext
-        run: |
-          # Copiar kubeconfig local para acceder al clúster
-          echo "${{ secrets.LOCAL_KUBE_CONFIG }}" | base64 --decode > kubeconfig
+      -
           mkdir -p $HOME/.kube
           mv kubeconfig $HOME/.kube/config
           chmod 600 $HOME/.kube/config
+
+ name: Configure Kubecontext
+        run: |
+          echo "${{ secrets.LOCAL_K      - name: Validate connection to cluster
+       UBE_CONFIG }}" | base64 --decode > run: |
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Deploy to Green Namespace
+ kubeconfig
+          mkdir -p $HOME/.kube
+          mv kubeconfig $HOME/.kube/config
+          chmod         run: |
+          kubectl apply -n green -f600 $HOME/.kube/config
 
       - name: Validate connection to cluster
         run: |
           kubectl cluster-info
           kubectl get nodes
 
-      - name: Deploy to Green Namespace
-        run: |
-          kubectl apply -n green -f k8s/deployment-green.yaml
+      - k8s/deployment-green.yaml
           kubectl set image deploy/my-app -n green my-app=${{ env.IMAGE }}
-          kubectl rollout status deploy/my-app -n green --timeout=3m
+          kub name: Deploy to Green Namespace
+        run: |
+         ectl rollout status deploy/my-app -n green --timeout= kubectl apply -n green -f k8s/deployment-green.yaml
+          kubectl set image deploy/my-app -n3m
 
       - name: Run Smoke Tests on Green Deployment
-        run: ./scripts/smoke-tests --url https://green.example.com
+        run: ./scripts/smoke-tests --url https://green green my-app=${{ env.IMAGE }}
+          kubectl rollout status deploy.example.com
 
   switch-traffic:
     needs: deploy-green
     runs-on: ubuntu-latest
     if: ${{ success() }}
-    steps:
+/my-app -n green --timeout=3m
+
+      - name: Run Smoke Tests on Green Deployment
+        run: ./scripts/smoke-tests --url https://green.example    steps:
       - name: Switch Service to Green
         run: |
-          kubectl -n production patch service my-app -p '{"spec":{"selector":{"version":"green"}}}'
+          kubectl -n production patch service my.com
+
+  switch-traffic:
+    needs: deploy-green
+-app -p '{"spec":{"selector":{"version":"green    runs-on: ubuntu-latest
+    if: ${{ success() }}
+    steps:
+      - name: Switch Service to Green
+       "}}}'
           sleep 10  # Wait for switch to stabilize
-          kubectl get svc -n production my-app -o wide
+          kubectl get svc -n production my-app run: |
+          kubectl -n production patch service my-app -p '{"spec":{"selector":{"version":"green -o wide
