@@ -7,6 +7,7 @@ spec:
   selector:
     matchLabels:
       app: practica-backend
+      version: blue  # ← AGREGAR ESTO (cambiará a green)
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -16,10 +17,11 @@ spec:
     metadata:
       labels:
         app: practica-backend
+        version: blue  # ← AGREGAR ESTO (cambiará a green)
     spec:
       containers:
-        - name: backend
-          image: 211739080646.dkr.ecr.us-east-1.amazonaws.com/practica-backend:latest
+        - name: practica-backend  # ← CAMBIAR nombre del container
+          image: ghcr.io/jbrayner123/practica-ing-software/app:latest  # ← USAR GHCR
           ports:
             - containerPort: 3001
           readinessProbe:
