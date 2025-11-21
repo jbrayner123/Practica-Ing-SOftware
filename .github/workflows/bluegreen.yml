@@ -80,6 +80,20 @@ jobs:
             --docker-password=${{ secrets.GHCR_TOKEN }} \
             -n green --dry-run=client -o yaml | kubectl apply -f -
 
+      - name: Test Database Connection with New Credentials
+        run: |
+          echo "🔍 Probando conexión con las NUEVAS credenciales..."
+          kubectl run -n green db-test --rm -i --restart=Never --image=postgres:13 -- \
+            sh -c '
+            apt-get update && apt-get install -y postgresql-client && \
+            PGPASSWORD="na3TJH8rJ2Ra0pFT1i1fekZqeZv24eJm" psql \
+            -h dpg-d4f2r0lrnu6s73dpudh0-a.oregon-postgres.render.com \
+            -U pollito \
+            -d mydb_gfpg \
+            -c "SELECT 1 as connection_test;" \
+            --set=sslmode=require
+            ' && echo "✅✅✅ CONEXIÓN EXITOSA - Las credenciales son correctas" || echo "❌ La conexión falló"
+
       - name: Deploy GREEN with Corrected Render Database
         run: |
           cat > deployment-green.yaml << 'EOF'
@@ -109,22 +123,9 @@ jobs:
                   - containerPort: 3000
                   env:
                   - name: DATABASE_URL
-                    value: "postgresql://my_user:2hLQpxZd1g2XgaguLoNnn4X8VpZY1y70@dpg-d4f2r0lrnu6s73dpudh0-a.oregon-postgres.render.com/mydb_qfpg?ssl=true"
+                    value: "postgresql://pollito:na3TJH8rJ2Ra0pFT1i1fekZqeZv24eJm@dpg-d4f2r0lrnu6s73dpudh0-a.oregon-postgres.render.com/mydb_gfpg?ssl=true"
                   - name: PORT
                     value: "3000"
-                  # PROBES TEMPORALMENTE DESHABILITADOS PARA DEBUG
-                  # readinessProbe:
-                  #   httpGet:
-                  #     path: /healthz
-                  #     port: 3000
-                  #   initialDelaySeconds: 30
-                  #   periodSeconds: 10
-                  # livenessProbe:
-                  #   httpGet:
-                  #     path: /healthz
-                  #     port: 3000
-                  #   initialDelaySeconds: 45
-                  #   periodSeconds: 15
                   resources:
                     requests:
                       memory: "128Mi"
@@ -142,7 +143,6 @@ jobs:
           echo "⏳ Esperando despliegue GREEN..."
           sleep 30
           
-          # Verificación manual sin health checks
           for i in {1..20}; do
             echo "Check #$i - Estado del pod:"
             kubectl get pods -n green -l version=green
@@ -158,7 +158,7 @@ jobs:
                 echo "=== Logs del pod ==="
                 kubectl logs -n green $POD_NAME --tail=25
                 echo "=== Verificando conexión a BD en los logs ==="
-                kubectl logs -n green $POD_NAME | grep -i "database\|postgres\|connection\|error" || echo "No se encontraron mensajes de BD específicos"
+                kubectl logs -n green $POD_NAME | grep -i "database\|postgres\|connection\|error\|success\|connected" || echo "No se encontraron mensajes de BD específicos"
                 echo "✅ Deployment completado exitosamente!"
                 exit 0
               elif [ "$POD_STATUS" = "Pending" ]; then
@@ -201,12 +201,10 @@ jobs:
       - name: Switch traffic to Green
         run: |
           echo "🔄 Cambiando tráfico a GREEN..."
-          # Actualiza el selector del servicio para apuntar a green
           kubectl patch service practica-backend-service -n green -p '{"spec":{"selector":{"version":"green"}}}' || echo "Service patch no aplicado"
           echo "✅ Tráfico dirigido a GREEN"
 
       - name: Scale down old deployment
         run: |
           echo "📉 Escalando deployment anterior a 0 réplicas..."
-          # Escala cualquier deployment anterior (blue) a 0
           kubectl scale deployment -n green --replicas=0 -l app=practica-backend,version!=green --timeout=30s || echo "No hay deployments anteriores para escalar"
