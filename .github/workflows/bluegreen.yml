@@ -44,17 +44,30 @@ jobs:
         with:
           version: 'v1.28.0'
 
-      - name: Configure kubeconfig
+      # ✅ NUEVA CONFIGURACIÓN PARA AWS EKS
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Update kubeconfig for EKS
         run: |
-          echo "${{ secrets.LOCAL_KUBE_CONFIG }}" | base64 --decode > kubeconfig
-          mkdir -p $HOME/.kube
-          mv kubeconfig $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
+          aws eks update-kubeconfig \
+            --region ${{ secrets.AWS_REGION }} \
+            --name ${{ secrets.EKS_CLUSTER_NAME }}
 
       - name: Validate Kubernetes cluster connection
         run: |
           kubectl cluster-info
           kubectl get nodes
+
+      # ✅ Crear namespaces si no existen
+      - name: Create namespaces
+        run: |
+          kubectl create namespace green --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create namespace production --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Apply Green Namespace manifests
         run: |
@@ -71,8 +84,22 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ success() }}
     steps:
+      # ✅ AGREGAR CONFIGURACIÓN DE AWS TAMBIÉN AQUÍ
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Update kubeconfig for EKS
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ secrets.AWS_REGION }} \
+            --name ${{ secrets.EKS_CLUSTER_NAME }}
+
       - name: Patch service to Green
         run: |
           kubectl -n production patch service my-app -p '{"spec":{"selector":{"version":"green"}}}'
-          sleep 10  # Wait for switch to stabilize
+          sleep 10
           kubectl get svc -n production my-app -o wide
