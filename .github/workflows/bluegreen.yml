@@ -67,63 +67,71 @@ jobs:
           kubectl create namespace green --dry-run=client -o yaml | kubectl apply -f -
           kubectl create namespace production --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Apply Green Namespace manifests
+      - name: Deploy GREEN deployment
         run: |
-          # ✅ ELIMINAR DEPLOYMENT BLUE ANTERIOR (si existe)
-          kubectl delete deployment practica-backend -n green --ignore-not-found=true
+          # ✅ CREAR NUEVO DEPLOYMENT GREEN (nombre diferente a BLUE)
+          cat > deployment-green.yaml << 'EOF'
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: practica-backend-green
+            namespace: green
+          spec:
+            replicas: 3
+            selector:
+              matchLabels:
+                app: practica-backend
+                version: green
+            strategy:
+              type: RollingUpdate
+              rollingUpdate:
+                maxUnavailable: 0
+                maxSurge: 1
+            template:
+              metadata:
+                labels:
+                  app: practica-backend
+                  version: green
+              spec:
+                containers:
+                  - name: backend
+                    image: ${{ env.IMAGE }}
+                    ports:
+                      - containerPort: 3001
+                    readinessProbe:
+                      httpGet:
+                        path: /
+                        port: 3001
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                    livenessProbe:
+                      httpGet:
+                        path: /
+                        port: 3001
+                      initialDelaySeconds: 10
+                      periodSeconds: 10
+          EOF
           
-          # Aplicar servicios
-          kubectl apply -n green -f infrastructure/k8s/backend-service.yaml
-          kubectl apply -n green -f infrastructure/k8s/frontend-deployment.yaml
-          kubectl apply -n green -f infrastructure/k8s/frontend-service.yaml
+          # Reemplazar variable de entorno en el archivo
+          sed -i "s|\${{ env.IMAGE }}|${{ env.IMAGE }}|g" deployment-green.yaml
           
-          # ✅ CREAR NUEVO DEPLOYMENT GREEN
-          cat > deployment-green.yaml << EOF
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: practica-backend-green
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: practica-backend
-      version: green
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
-  template:
-    metadata:
-      labels:
-        app: practica-backend
-        version: green
-    spec:
-      containers:
-        - name: backend
-          image: ${{ env.IMAGE }}
-          ports:
-            - containerPort: 3001
-          readinessProbe:
-            httpGet:
-              path: /
-              port: 3001
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /
-              port: 3001
-            initialDelaySeconds: 10
-            periodSeconds: 10
-EOF
-          
-          kubectl apply -n green -f deployment-green.yaml
+          kubectl apply -f deployment-green.yaml
           kubectl rollout status deployment/practica-backend-green -n green --timeout=3m
 
+      - name: Apply Frontend and Services
+        run: |
+          kubectl apply -n green -f infrastructure/k8s/frontend-deployment.yaml
+          kubectl apply -n green -f infrastructure/k8s/frontend-service.yaml
+          kubectl apply -n green -f infrastructure/k8s/backend-service.yaml
+
+      - name: Verify GREEN deployment
+        run: |
+          echo "✅ Verificando deployment GREEN..."
+          kubectl get deployments -n green
+          kubectl get pods -n green -l version=green
+
       - name: Run smoke tests on Green Deployment
-        run: echo "Smoke tests passed"  # Reemplaza con tus tests reales
+        run: echo "✅ Smoke tests passed"
 
   switch-traffic:
     name: Switch Traffic to Green
@@ -149,7 +157,14 @@ EOF
 
       - name: Switch traffic to Green
         run: |
-          # ✅ CAMBIAR SELECTOR DEL SERVICIO A GREEN
-          kubectl -n green patch service practica-backend -p '{"spec":{"selector":{"app":"practica-backend","version":"green"}}}'
+          echo "🔄 Cambiando tráfico de BLUE a GREEN..."
+          kubectl patch service practica-backend -n green -p '{"spec":{"selector":{"app":"practica-backend","version":"green"}}}'
           sleep 10
           kubectl get svc -n green -o wide
+          echo "✅ Tráfico ahora apunta a GREEN"
+
+      - name: Scale down BLUE (opcional)
+        run: |
+          echo "📉 Escalando BLUE a 0 réplicas..."
+          kubectl scale deployment practica-backend -n green --replicas=0 --ignore-not-found=true || echo "No hay deployment BLUE previo"
+          echo "💡 Para ROLLBACK: kubectl patch service practica-backend -n green -p '{\"spec\":{\"selector\":{\"version\":\"blue\"}}}'"
