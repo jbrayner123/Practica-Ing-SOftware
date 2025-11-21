@@ -47,7 +47,7 @@ initializeDatabase();
 
 // Endpoint básico para la raíz
 app.get('/', (req, res) => {
-  res.send('Welcome to the Backend APIIIIIIIIIIII!!!p!');
+  res.send('Welcome to the Backend APIIIIIIIIIIII!!!pp!');
 });
 
 // Endpoint para obtener todos los usuarios
