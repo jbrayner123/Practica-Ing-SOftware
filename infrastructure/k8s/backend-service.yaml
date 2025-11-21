@@ -5,6 +5,7 @@ metadata:
 spec:
   selector:
     app: practica-backend
+    version: blue  # ← AGREGAR ESTO (cambiará a green)
   ports:
     - name: http
       port: 3001
