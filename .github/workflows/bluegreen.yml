@@ -69,7 +69,7 @@ jobs:
             name: practica-backend-green
             namespace: green
           spec:
-            replicas: 2  # Comienza con menos réplicas
+            replicas: 2
             selector:
               matchLabels:
                 app: practica-backend
@@ -89,18 +89,17 @@ jobs:
                 - name: backend
                   image: ${{ env.IMAGE }}
                   ports:
-                  - containerPort: 5000  # Puerto DEFAULT de Flask
+                  - containerPort: 5000
                   env:
                   - name: FLASK_ENV
                     value: "production"
                   - name: DATABASE_URL
-                    value: "postgresql://user:password@postgres-service:5432/dbname"  # AJUSTA ESTO
-                  # HEALTH CHECKS MEJORADOS
+                    value: "postgresql://user:password@postgres-service.green.svc.cluster.local:5432/dbname"
                   readinessProbe:
                     httpGet:
-                      path: /  # O /health si tienes endpoint de health
+                      path: /
                       port: 5000
-                    initialDelaySeconds: 25  # Más tiempo para EKS
+                    initialDelaySeconds: 25
                     periodSeconds: 10
                     timeoutSeconds: 5
                     failureThreshold: 3
@@ -121,27 +120,20 @@ jobs:
                       cpu: "500m"
           EOF
           
-          # Reemplazar la imagen
           sed -i "s|\${{ env.IMAGE }}|${{ env.IMAGE }}|g" deployment-green.yaml
           kubectl apply -f deployment-green.yaml
 
       - name: Wait for rollout with progressive checks
         run: |
           echo "⏳ Esperando despliegue GREEN..."
-          
-          # Espera inicial para que los pods se creen
           sleep 30
           
-          # Verificación progresiva
           for i in {1..12}; do
             echo "Check #$i - Estado de los pods:"
             kubectl get pods -n green -l version=green
             
-            # Verificar si algún pod está corriendo
             if kubectl get pods -n green -l version=green | grep -q "Running"; then
               echo "✅ Al menos un pod está Running, verificando logs..."
-              
-              # Obtener el primer pod running
               POD_NAME=$(kubectl get pods -n green -l version=green --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
               
               if [ -n "$POD_NAME" ]; then
@@ -150,7 +142,6 @@ jobs:
               fi
             fi
             
-            # Intentar el status del rollout
             if kubectl rollout status deployment/practica-backend-green -n green --timeout=10s 2>/dev/null; then
               echo "✅🎉 Deployment GREEN completado exitosamente!"
               exit 0
@@ -186,12 +177,14 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ success() }}
     steps:
-      - name: Configure AWS and EKS
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Update kubeconfig for EKS
         run: |
           aws eks update-kubeconfig \
             --region ${{ secrets.AWS_REGION }} \
@@ -200,6 +193,12 @@ jobs:
       - name: Switch traffic to Green
         run: |
           echo "🔄 Cambiando tráfico a GREEN..."
-          # Asumiendo que tienes un service que selecciona por version
+          # Actualiza el selector del servicio para apuntar a green
           kubectl patch service practica-backend-service -n green -p '{"spec":{"selector":{"version":"green"}}}' || echo "Service patch no aplicado"
           echo "✅ Tráfico dirigido a GREEN"
+
+      - name: Scale down old deployment (optional)
+        run: |
+          echo "📉 Escalando deployment anterior a 0 réplicas..."
+          # Escala cualquier deployment anterior (blue) a 0
+          kubectl scale deployment -n green --replicas=0 -l app=practica-backend,version!=green --timeout=30s || echo "No hay deployments anteriores para escalar"
