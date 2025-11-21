@@ -17,7 +17,7 @@ jobs:
 
       - name: ZAP Full Scan
         uses: zaproxy/action-full-scan@v0.10.0
-        continue-on-error: true  # ✅ No fallar el workflow si hay error en artefactos
+        continue-on-error: true
         with:
           target: ${{ secrets.APP_BASE_URL }}
           allow_issue_writing: true
@@ -26,12 +26,13 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload ZAP Reports
-        if: always()  # ✅ Ejecutar siempre, incluso si el scan falló
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: zap-reports
+          name: zap-reports-${{ github.run_number }}  # ✅ SOLUCIÓN: Nombre único
           path: |
             report_html.html
             report_json.json
             report_md.md
           if-no-files-found: warn
+          retention-days: 30  # Opcional: mantener reportes por 30 días
