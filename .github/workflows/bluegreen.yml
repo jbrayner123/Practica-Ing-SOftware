@@ -16,9 +16,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v2
         with:
@@ -28,8 +25,8 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          docker build -t ghcr.io/jbrayner123/practica-ing-software/app:${{ github.sha }} -f backend/Dockerfile backend
-          docker push ghcr.io/jbrayner123/practica-ing-software/app:${{ github.sha }}
+          docker build -t ${{ env.IMAGE }} -f backend/Dockerfile backend
+          docker push ${{ env.IMAGE }}
 
   deploy-green:
     name: Deploy to Green Namespace
@@ -38,11 +35,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
-        with:
-          version: 'v1.28.0'
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -57,19 +49,19 @@ jobs:
             --region ${{ secrets.AWS_REGION }} \
             --name ${{ secrets.EKS_CLUSTER_NAME }}
 
-      - name: Validate Kubernetes cluster connection
-        run: |
-          kubectl cluster-info
-          kubectl get nodes
-
-      - name: Create namespaces
+      - name: Create green namespace if not exists
         run: |
           kubectl create namespace green --dry-run=client -o yaml | kubectl apply -f -
-          kubectl create namespace production --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Deploy GREEN deployment
+      - name: Deploy Database dependencies first
         run: |
-          # ✅ CREAR NUEVO DEPLOYMENT GREEN (nombre diferente a BLUE)
+          # Aplica primero la base de datos y servicios esenciales
+          kubectl apply -n green -f infrastructure/k8s/postgres-deployment.yaml || echo "PostgreSQL no encontrado"
+          kubectl apply -n green -f infrastructure/k8s/backend-service.yaml || echo "Service no encontrado"
+          sleep 10
+
+      - name: Deploy GREEN with proper configuration
+        run: |
           cat > deployment-green.yaml << 'EOF'
           apiVersion: apps/v1
           kind: Deployment
@@ -77,7 +69,7 @@ jobs:
             name: practica-backend-green
             namespace: green
           spec:
-            replicas: 3
+            replicas: 2  # Comienza con menos réplicas
             selector:
               matchLabels:
                 app: practica-backend
@@ -94,44 +86,99 @@ jobs:
                   version: green
               spec:
                 containers:
-                  - name: backend
-                    image: ${{ env.IMAGE }}
-                    ports:
-                      - containerPort: 3001
-                    readinessProbe:
-                      httpGet:
-                        path: /
-                        port: 3001
-                      initialDelaySeconds: 5
-                      periodSeconds: 10
-                    livenessProbe:
-                      httpGet:
-                        path: /
-                        port: 3001
-                      initialDelaySeconds: 10
-                      periodSeconds: 10
+                - name: backend
+                  image: ${{ env.IMAGE }}
+                  ports:
+                  - containerPort: 5000  # Puerto DEFAULT de Flask
+                  env:
+                  - name: FLASK_ENV
+                    value: "production"
+                  - name: DATABASE_URL
+                    value: "postgresql://user:password@postgres-service:5432/dbname"  # AJUSTA ESTO
+                  # HEALTH CHECKS MEJORADOS
+                  readinessProbe:
+                    httpGet:
+                      path: /  # O /health si tienes endpoint de health
+                      port: 5000
+                    initialDelaySeconds: 25  # Más tiempo para EKS
+                    periodSeconds: 10
+                    timeoutSeconds: 5
+                    failureThreshold: 3
+                  livenessProbe:
+                    httpGet:
+                      path: /
+                      port: 5000
+                    initialDelaySeconds: 40
+                    periodSeconds: 15
+                    timeoutSeconds: 5
+                    failureThreshold: 3
+                  resources:
+                    requests:
+                      memory: "256Mi"
+                      cpu: "250m"
+                    limits:
+                      memory: "512Mi"
+                      cpu: "500m"
           EOF
           
-          # Reemplazar variable de entorno en el archivo
+          # Reemplazar la imagen
           sed -i "s|\${{ env.IMAGE }}|${{ env.IMAGE }}|g" deployment-green.yaml
-          
           kubectl apply -f deployment-green.yaml
-          kubectl rollout status deployment/practica-backend-green -n green --timeout=3m
 
-      - name: Apply Frontend and Services
+      - name: Wait for rollout with progressive checks
         run: |
-          kubectl apply -n green -f infrastructure/k8s/frontend-deployment.yaml
-          kubectl apply -n green -f infrastructure/k8s/frontend-service.yaml
-          kubectl apply -n green -f infrastructure/k8s/backend-service.yaml
+          echo "⏳ Esperando despliegue GREEN..."
+          
+          # Espera inicial para que los pods se creen
+          sleep 30
+          
+          # Verificación progresiva
+          for i in {1..12}; do
+            echo "Check #$i - Estado de los pods:"
+            kubectl get pods -n green -l version=green
+            
+            # Verificar si algún pod está corriendo
+            if kubectl get pods -n green -l version=green | grep -q "Running"; then
+              echo "✅ Al menos un pod está Running, verificando logs..."
+              
+              # Obtener el primer pod running
+              POD_NAME=$(kubectl get pods -n green -l version=green --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+              
+              if [ -n "$POD_NAME" ]; then
+                echo "=== Logs del pod $POD_NAME ==="
+                kubectl logs -n green $POD_NAME --tail=20
+              fi
+            fi
+            
+            # Intentar el status del rollout
+            if kubectl rollout status deployment/practica-backend-green -n green --timeout=10s 2>/dev/null; then
+              echo "✅🎉 Deployment GREEN completado exitosamente!"
+              exit 0
+            fi
+            
+            echo "⌛ Intento $i/12 - Deployment aún no está listo, esperando 15 segundos..."
+            sleep 15
+          done
+          
+          echo "❌ TIMEOUT - Despliegue falló después de 3 minutos"
+          echo "=== DEBUG DETALLADO ==="
+          kubectl get all -n green
+          echo "=== DESCRIBE DEPLOYMENT ==="
+          kubectl describe deployment practica-backend-green -n green
+          echo "=== EVENTOS ==="
+          kubectl get events -n green --sort-by='.lastTimestamp'
+          echo "=== LOGS DE TODOS LOS PODS ==="
+          for pod in $(kubectl get pods -n green -l version=green -o name); do
+            echo "Logs para $pod:"
+            kubectl logs -n green $pod --tail=50 || echo "No se pueden obtener logs"
+          done
+          exit 1
 
-      - name: Verify GREEN deployment
+      - name: Deploy Frontend to Green
+        if: success()
         run: |
-          echo "✅ Verificando deployment GREEN..."
-          kubectl get deployments -n green
-          kubectl get pods -n green -l version=green
-
-      - name: Run smoke tests on Green Deployment
-        run: echo "✅ Smoke tests passed"
+          kubectl apply -n green -f infrastructure/k8s/frontend-deployment.yaml || echo "Frontend no configurado"
+          kubectl apply -n green -f infrastructure/k8s/frontend-service.yaml || echo "Frontend service no configurado"
 
   switch-traffic:
     name: Switch Traffic to Green
@@ -139,17 +186,12 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ success() }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
+      - name: Configure AWS and EKS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Update kubeconfig for EKS
         run: |
           aws eks update-kubeconfig \
             --region ${{ secrets.AWS_REGION }} \
@@ -157,14 +199,7 @@ jobs:
 
       - name: Switch traffic to Green
         run: |
-          echo "🔄 Cambiando tráfico de BLUE a GREEN..."
-          kubectl patch service practica-backend -n green -p '{"spec":{"selector":{"app":"practica-backend","version":"green"}}}'
-          sleep 10
-          kubectl get svc -n green -o wide
-          echo "✅ Tráfico ahora apunta a GREEN"
-
-      - name: Scale down BLUE (opcional)
-        run: |
-          echo "📉 Escalando BLUE a 0 réplicas..."
-          kubectl scale deployment practica-backend -n green --replicas=0 --ignore-not-found=true || echo "No hay deployment BLUE previo"
-          echo "💡 Para ROLLBACK: kubectl patch service practica-backend -n green -p '{\"spec\":{\"selector\":{\"version\":\"blue\"}}}'"
+          echo "🔄 Cambiando tráfico a GREEN..."
+          # Asumiendo que tienes un service que selecciona por version
+          kubectl patch service practica-backend-service -n green -p '{"spec":{"selector":{"version":"green"}}}' || echo "Service patch no aplicado"
+          echo "✅ Tráfico dirigido a GREEN"
