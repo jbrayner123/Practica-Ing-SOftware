@@ -44,7 +44,7 @@ jobs:
         with:
           version: 'v1.28.0'
 
-      # ✅ NUEVA CONFIGURACIÓN PARA AWS EKS
+      # ✅ CONFIGURACIÓN AWS EKS
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -63,17 +63,18 @@ jobs:
           kubectl cluster-info
           kubectl get nodes
 
-      # ✅ Crear namespaces si no existen
+      # ✅ CREAR NAMESPACES
       - name: Create namespaces
         run: |
           kubectl create namespace green --dry-run=client -o yaml | kubectl apply -f -
           kubectl create namespace production --dry-run=client -o yaml | kubectl apply -f -
 
+      # ✅ RUTA Y NOMBRES CORRECTOS
       - name: Apply Green Namespace manifests
         run: |
-          kubectl apply -n green -f k8s/deployment-green.yaml
-          kubectl set image deploy/my-app -n green my-app=${{ env.IMAGE }}
-          kubectl rollout status deploy/my-app -n green --timeout=3m
+          kubectl apply -n green -f infrastructure/k8s/
+          kubectl set image deployment/backend -n green backend=${{ env.IMAGE }}
+          kubectl rollout status deployment/backend -n green --timeout=3m
 
       - name: Run smoke tests on Green Deployment
         run: ./scripts/smoke-tests --url https://green.example.com
@@ -84,7 +85,10 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ success() }}
     steps:
-      # ✅ AGREGAR CONFIGURACIÓN DE AWS TAMBIÉN AQUÍ
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ✅ CONFIGURACIÓN AWS TAMBIÉN AQUÍ
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -98,8 +102,9 @@ jobs:
             --region ${{ secrets.AWS_REGION }} \
             --name ${{ secrets.EKS_CLUSTER_NAME }}
 
+      # ✅ NOMBRE CORRECTO DEL SERVICIO
       - name: Patch service to Green
         run: |
-          kubectl -n production patch service my-app -p '{"spec":{"selector":{"version":"green"}}}'
+          kubectl -n production patch service backend -p '{"spec":{"selector":{"version":"green"}}}'
           sleep 10
-          kubectl get svc -n production my-app -o wide
+          kubectl get svc -n production backend -o wide
