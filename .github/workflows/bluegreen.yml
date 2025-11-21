@@ -80,7 +80,7 @@ jobs:
             --docker-password=${{ secrets.GHCR_TOKEN }} \
             -n green --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Deploy GREEN with minimal resources
+      - name: Deploy GREEN with Render Database
         run: |
           cat > deployment-green.yaml << 'EOF'
           apiVersion: apps/v1
@@ -89,7 +89,7 @@ jobs:
             name: practica-backend-green
             namespace: green
           spec:
-            replicas: 1  # SOLO 1 RÉPLICA PARA PRUEBAS
+            replicas: 1
             selector:
               matchLabels:
                 app: practica-backend
@@ -106,23 +106,28 @@ jobs:
                 - name: practica-backend
                   image: ${{ env.IMAGE }}
                   ports:
-                  - containerPort: 3001  # PUERTO CORRECTO SEGÚN TU DEPLOYMENT
+                  - containerPort: 3000  # ✅ PUERTO CORRECTO (3000 según tus logs)
+                  env:
+                  - name: DATABASE_URL
+                    value: "postgresql://my_user:2hLQpxZd1g2XgaguloNnn4X9VpZYly7O@dpg-d4f2r0lrnu6s73dpudh0-a.oregon-postgres.render.com/mydb_gfpg"
+                  - name: PORT
+                    value: "3000"
                   # PROBES TEMPORALMENTE DESHABILITADOS PARA DEBUG
                   # readinessProbe:
                   #   httpGet:
-                  #     path: /readiness
-                  #     port: 3001
+                  #     path: /healthz
+                  #     port: 3000
                   #   initialDelaySeconds: 30
                   #   periodSeconds: 10
                   # livenessProbe:
                   #   httpGet:
                   #     path: /healthz
-                  #     port: 3001
+                  #     port: 3000
                   #   initialDelaySeconds: 45
                   #   periodSeconds: 15
                   resources:
                     requests:
-                      memory: "128Mi"  # MÍNIMOS RECURSOS
+                      memory: "128Mi"
                       cpu: "100m"
                     limits:
                       memory: "256Mi"
@@ -134,7 +139,7 @@ jobs:
 
       - name: Wait for deployment with debug
         run: |
-          echo "⏳ Esperando despliegue GREEN (con probes deshabilitados)..."
+          echo "⏳ Esperando despliegue GREEN..."
           sleep 30
           
           # Verificación manual sin health checks
@@ -157,6 +162,10 @@ jobs:
               elif [ "$POD_STATUS" = "Pending" ]; then
                 echo "❌ Pod aún PENDING - mostrando detalles:"
                 kubectl describe pod -n green $POD_NAME
+              elif [ "$POD_STATUS" = "ErrImagePull" ] || [ "$POD_STATUS" = "ImagePullBackOff" ]; then
+                echo "❌❌❌ ERROR DESCARGANDO IMAGEN ❌❌❌"
+                kubectl describe pod -n green $POD_NAME
+                exit 1
               fi
             fi
             
@@ -167,3 +176,35 @@ jobs:
           echo "❌ TIMEOUT - Pod nunca llegó a Running"
           kubectl get events -n green --sort-by='.lastTimestamp' | tail -20
           exit 1
+
+  switch-traffic:
+    name: Switch Traffic to Green
+    needs: deploy-green
+    runs-on: ubuntu-latest
+    if: ${{ success() }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Update kubeconfig for EKS
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ secrets.AWS_REGION }} \
+            --name ${{ secrets.EKS_CLUSTER_NAME }}
+
+      - name: Switch traffic to Green
+        run: |
+          echo "🔄 Cambiando tráfico a GREEN..."
+          # Actualiza el selector del servicio para apuntar a green
+          kubectl patch service practica-backend-service -n green -p '{"spec":{"selector":{"version":"green"}}}' || echo "Service patch no aplicado"
+          echo "✅ Tráfico dirigido a GREEN"
+
+      - name: Scale down old deployment
+        run: |
+          echo "📉 Escalando deployment anterior a 0 réplicas..."
+          # Escala cualquier deployment anterior (blue) a 0
+          kubectl scale deployment -n green --replicas=0 -l app=practica-backend,version!=green --timeout=30s || echo "No hay deployments anteriores para escalar"
