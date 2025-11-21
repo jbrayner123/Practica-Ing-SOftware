@@ -69,17 +69,55 @@ jobs:
 
       - name: Apply Green Namespace manifests
         run: |
-          # Aplicar manifests en green
-          kubectl apply -n green -f infrastructure/k8s/
+          # Aplicar solo frontend y servicios (excluir backend deployment)
+          kubectl apply -n green -f infrastructure/k8s/backend-service.yaml
+          kubectl apply -n green -f infrastructure/k8s/frontend-deployment.yaml
+          kubectl apply -n green -f infrastructure/k8s/frontend-service.yaml
           
-          # ✅ NOMBRE CORRECTO DEL CONTAINER Y VERSION GREEN
-          kubectl set image deployment/practica-backend -n green practica-backend=${{ env.IMAGE }}
+          # ✅ CREAR NUEVO DEPLOYMENT GREEN
+          cat > deployment-green.yaml << EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: practica-backend-green
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: practica-backend
+      version: green
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: practica-backend
+        version: green
+    spec:
+      containers:
+        - name: backend
+          image: ${{ env.IMAGE }}
+          ports:
+            - containerPort: 3001
+          readinessProbe:
+            httpGet:
+              path: /readiness
+              port: 3001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+EOF
           
-          # ✅ CAMBIAR LABELS A GREEN
-          kubectl patch deployment practica-backend -n green -p '{"spec":{"selector":{"matchLabels":{"version":"green"}}}}'
-          kubectl patch deployment practica-backend -n green -p '{"spec":{"template":{"metadata":{"labels":{"version":"green"}}}}}'
-          
-          kubectl rollout status deployment/practica-backend -n green --timeout=3m
+          kubectl apply -n green -f deployment-green.yaml
+          kubectl rollout status deployment/practica-backend-green -n green --timeout=3m
 
       - name: Run smoke tests on Green Deployment
         run: ./scripts/smoke-tests --url https://green.example.com
@@ -108,7 +146,10 @@ jobs:
 
       - name: Switch traffic to Green
         run: |
-          # ✅ PATCH CORRECTO - cambiar selector del servicio a green
-          kubectl -n production patch service practica-backend -p '{"spec":{"selector":{"version":"green"}}}'
+          # ✅ CAMBIAR SELECTOR DEL SERVICIO A GREEN
+          kubectl -n green patch service practica-backend -p '{"spec":{"selector":{"version":"green"}}}'
           sleep 10
-          kubectl get svc -n production -o wide
+          kubectl get svc -n green -o wide
+          
+          # ✅ OPCIONAL: Eliminar deployment blue anterior
+          kubectl delete deployment practica-backend -n green --ignore-not-found=true
