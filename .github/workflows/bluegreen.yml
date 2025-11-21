@@ -80,7 +80,7 @@ jobs:
             --docker-password=${{ secrets.GHCR_TOKEN }} \
             -n green --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Deploy GREEN with Render Database
+      - name: Deploy GREEN with Corrected Render Database
         run: |
           cat > deployment-green.yaml << 'EOF'
           apiVersion: apps/v1
@@ -106,10 +106,10 @@ jobs:
                 - name: practica-backend
                   image: ${{ env.IMAGE }}
                   ports:
-                  - containerPort: 3000  # ✅ PUERTO CORRECTO (3000 según tus logs)
+                  - containerPort: 3000
                   env:
                   - name: DATABASE_URL
-                    value: "postgresql://my_user:2hLQpxZd1g2XgaguloNnn4X9VpZYly7O@dpg-d4f2r0lrnu6s73dpudh0-a.oregon-postgres.render.com/mydb_gfpg"
+                    value: "postgresql://my_user:2hLQpxZd1g2XgaguLoNnn4X8VpZY1y70@dpg-d4f2r0lrnu6s73dpudh0-a.oregon-postgres.render.com/mydb_qfpg?ssl=true"
                   - name: PORT
                     value: "3000"
                   # PROBES TEMPORALMENTE DESHABILITADOS PARA DEBUG
@@ -156,7 +156,9 @@ jobs:
               if [ "$POD_STATUS" = "Running" ]; then
                 echo "✅ Pod está RUNNING!"
                 echo "=== Logs del pod ==="
-                kubectl logs -n green $POD_NAME --tail=20
+                kubectl logs -n green $POD_NAME --tail=25
+                echo "=== Verificando conexión a BD en los logs ==="
+                kubectl logs -n green $POD_NAME | grep -i "database\|postgres\|connection\|error" || echo "No se encontraron mensajes de BD específicos"
                 echo "✅ Deployment completado exitosamente!"
                 exit 0
               elif [ "$POD_STATUS" = "Pending" ]; then
